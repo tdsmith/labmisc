@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 # coding=utf8
 
 # spec_agg.py
@@ -6,7 +6,8 @@
 # Reads all .csv files in the current directory and creates a series of .png
 # charts and spec_summary.html. Does not check before overwriting files so be
 # careful. Also spits a table of A230, A260, A280, and A320 as tab-separated
-# values to stdout.
+# values to stdout. A convenient way to print the graphs for your lab notebook
+# is to open the .html file in Word, select Print..., and set scaling to 40%.
 # Invoke as: ./spec_agg.py > output.tab
 
 from glob import glob
