@@ -2,13 +2,51 @@
 
 from math import isnan, log
 from numpy import mean, std
+from scipy.stats.mstats import gmean
+from warnings import warn
 from types import *
 
 log2 = lambda x: log(x)/log(2)
 
 def average_cq(seq, efficiency=1.0):
+    # given a set of Cq values, return the Cq value that represents the
+    # average expression level of the input.
+    # The intent is to average the expression levels of the samples,
+    # since the average of Cq values is not biologically meaningful.
     denominator = sum( [pow(2.0*efficiency, -Ci) for Ci in seq] )
     return log(len(seq)/denominator)/log(2.0*efficiency)
+
+def make_sample_dict(sample_list):
+    d = {} # d[target][sample] = [cq1, cq2, ...]
+    for (target, sample, cq) in sample_list:
+        assert type(cq) is FloatType
+        if(isnan(cq)):
+            warn('Ignoring NaN Cq value for target %s, sample %s' % (target, sample), RuntimeWarning)
+            continue
+        d.setdefault(target,{}).setdefault(sample,[]).append(cq)
+    return d
+
+def censor_background(d):
+    # censor anything too close to any NTCs we have and remove NTCs from d
+    # operates on d in place
+    margin = log2(10)
+    for target in d:
+        if not ('NTC' in d[target]): continue
+        too_close = min(d[target]['NTC']) - margin
+        for sample in d[target].keys():
+            if sample == 'NTC': continue
+            d[target][sample] = [i for i in d[target][sample] if i < too_close]
+            if len(d[target][sample]) == 0: del d[target][sample]
+        del d[target]['NTC']
+
+def censor_targets_missing_refsample(d, ref_sample):
+    # all genes must have a reference sample
+    ignored_targets = []
+    for target in d.keys():
+        if ref_sample not in d[target]:
+            ignored_targets.append(target)
+            del d[target]
+    return ignored_targets
 
 def expression(sample_list, ref_gene, ref_sample):
     # out, ignored_targets, ignored_samples = expression(sample_list, ref_gene, ref_sample)
@@ -20,29 +58,9 @@ def expression(sample_list, ref_gene, ref_sample):
     # each rel_n is from a replicate in the input list and is relative to the
     # reference sample
 
-    d = {} # d[target][sample] = [cq1, cq2, ...]
-    for (target, sample, cq) in sample_list:
-        assert type(cq) is FloatType
-        if(isnan(cq)): continue # drop silently
-        d.setdefault(target,{}).setdefault(sample,[]).append(cq)
-
-    # censor anything too close to any NTCs we have
-    margin = log(10)/log(2)
-    for target in d:
-        if not ('NTC' in d[target]): continue
-        too_close = min(d[target]['NTC']) - margin
-        for sample in d[target].keys():
-            if sample == 'NTC': continue
-            d[target][sample] = [i for i in d[target][sample] if i < too_close]
-            if len(d[target][sample]) == 0: del d[target][sample]
-        del d[target]['NTC']
-
-    # make sure all genes have a reference sample
-    ignored_targets = []
-    for target in d.keys():
-        if not (ref_sample in d[target]):
-            ignored_targets.append(target)
-            del d[target]
+    d = make_sample_dict(sample_list)
+    censor_background(d)
+    ignored_targets = censor_targets_missing_refsample(d, ref_sample)
 
     # reference genes need to be defined for each sample. ID them first
     ignored_samples = []
@@ -69,24 +87,58 @@ def expression(sample_list, ref_gene, ref_sample):
 
     return (out, ignored_targets, ignored_samples)
 
-def rank_genes(sample_list, ref_genes, ref_sample):
+def expression_nf(sample_list, nfs, ref_sample):
+    d = make_sample_dict(sample_list)
+    censor_background(d)
+    ignored_targets = censor_targets_missing_refsample(d, ref_sample)
+
+    # make sure all samples have a NF
+    ignored_samples = []
+    for target in d:
+        for sample in d[target]:
+            if sample not in nfs:
+                ignored_samples.append(sample)
+    for target in d:
+        for ignoreme in ignored_samples:
+            if ignoreme in d['target']:
+                del d[target][ignoreme]
+
+    out = {}
+    for target in d:
+        for sample in d[target]:
+            for cq in d[target][sample]:
+                delta = -cq + average_cq(d[target][ref_sample])
+                rel = pow(2, delta) / nfs[sample]
+                out.setdefault(target, {}).setdefault(sample, []).append(rel)
+
+    return (out, ignored_targets, ignored_samples)
+
+
+def collect_expression(sample_list, ref_genes, ref_sample):
+    # normalize all samples by each of the reference genes
+    table = {}
+    if not (type(ref_genes) is set): ref_genes = set(ref_genes)
+    available_samples = set([sample[1] for sample in sample_list if sample[1] != 'NTC'])
+    for ref_gene in ref_genes:
+        table[ref_gene], ignored_targets, ignored_samples = expression(sample_list, ref_gene, ref_sample)
+        if set(ignored_targets).intersection(ref_genes):
+            raise ValueError("Bad reference sample. One or more reference gene values are not available.")
+        available_samples -= set(ignored_samples)
+    return table, available_samples
+
+
+def rank_genes(sample_list, ref_genes, ref_sample, with_m=False):
     # applies the Vandesompele et al. (2002) method to rank reference genes
     # in order of stability.
     # doi:10.1186/gb-2002-3-7-research0034
 
     ref_genes = set(ref_genes)
 
-    # first, normalize all samples by each of the reference genes
-    table = {}
-    available_samples = set([sample[1] for sample in sample_list])
-    for ref_gene in ref_genes:
-        table[ref_gene], ignored_targets, ignored_samples = expression(sample_list, ref_gene, ref_sample)
-        if set(ignored_targets).intersection(ref_genes):
-            raise ValueError("Bad reference sample. One or more reference gene values are not available.")
-        available_samples -= set(ignored_samples)
+    table, available_samples = collect_expression(sample_list, ref_genes, ref_sample)
 
     worst = []
-    while len(ref_genes) - len(worst) > 2:
+    worst_m = []
+    while len(ref_genes) - len(worst) > 1:
         # calculate M for each gene
         M = []
         for test_gene in ref_genes:
@@ -100,6 +152,59 @@ def rank_genes(sample_list, ref_genes, ref_sample):
                 Vs.append(std(A))
             M.append( (sum(Vs) / (len(ref_genes) - len(worst) - 1), test_gene) )
         worst.append(max(M)[1])
+        worst_m.append(max(M)[0])
     best = ref_genes - set(worst) # whatever's left over
     worst.reverse()
-    return list(best) + worst
+    worst_m.reverse()
+    worst_m = [worst_m[0]] + worst_m
+    if with_m:
+        return list(best) + worst, worst_m
+    else:
+        return list(best) + worst
+
+def calculate_all_nfs(sample_list, ranked_genes, ref_sample):
+    # Given a list of sample results and an ordered list of reference genes
+    # (as produced by rank_genes), calculate_all_nfs computes normalization factors
+    # for all samples, using successively larger subsets of the reference gene
+    # list. All computed normalization factors are returned. Use nf_v() to
+    # determine how many reference genes to include in your experimental
+    # samples.
+    # Returns a dictionary nfs, where nfs[n_genes][sample] = nf, for
+    # 2 <= n_genes <= len(ref_genes).
+
+    # d[ref_gene][target][sample] = [rel0, rel1]
+    nfs = {}
+    d = make_sample_dict(sample_list)
+    for i in range(1, len(ranked_genes)+1):
+        nfs[i] = {}
+        for sample in d[ranked_genes[0]]:
+            nfs[i][sample] = gmean([pow(2, -average_cq(d[ref_gene][sample]) + average_cq(d[ref_gene][ref_sample])) for ref_gene in ranked_genes[:i]])
+    return nfs
+
+def nfs_from(sample_list, ref_genes, ref_sample):
+    # Returns a dictionary nfs, where nfs[sample] = nf.
+    nfs = {}
+    d = make_sample_dict(sample_list) # d[ref_gene][target][sample] = [rel0, rel1]
+    for sample in d[ref_genes[0]]:
+        if sample == 'NTC': continue
+        nfs[sample] = gmean([pow(2, -average_cq(d[ref_gene][sample]) + average_cq(d[ref_gene][ref_sample])) for ref_gene in ref_genes])
+    return nfs
+
+def nf_v(nfs):
+    v = {}
+    for i in range(2, max(nfs.keys())+1):
+        if not (i in nfs): break
+        if not (i+1 in nfs): break
+        v[i] = std([ log2(nfs[i][sample]/nfs[i+1][sample]) for sample in nfs[i] ], ddof=1)
+    return v
+
+def recommend_refset(sample_list, ref_genes, ref_sample):
+    ranked_genes = rank_genes(sample_list, ref_genes, ref_sample)
+    nfs = calculate_all_nfs(sample_list, ref_genes, ref_sample)
+    vs = nf_v(nfs)
+    rec = [(ranked_genes[0], 0)]
+    for v in sorted(vs.keys()):
+        if v > 3 and vs[v-1] < 0.15: break
+        rec.append((ranked_genes[v-1], vs[v]))
+    return rec
+
