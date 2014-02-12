@@ -5,6 +5,7 @@ from numpy import mean, std
 from scipy.stats.mstats import gmean
 from warnings import warn
 from types import *
+import pandas as pd
 
 log2 = lambda x: log(x)/log(2)
 
@@ -25,6 +26,18 @@ def make_sample_dict(sample_list):
             continue
         d.setdefault(target,{}).setdefault(sample,[]).append(cq)
     return d
+
+def validate_sample_frame(sample_frame):
+    if not isinstance(sample_frame, pd.core.frame.DataFrame):
+        raise TypeError("Expected a pandas DataFrame, received {}".format(type(sample_frame)))
+    for col in ['Sample', 'Target', 'Cq']:
+        if col not in sample_frame:
+            raise ValueError("Missing column {} in sample frame".format(col))
+    if sample_frame['Cq'].dtype.kind != 'f':
+        raise ValueError("Expected Cq column to have float type; has type {} instead".format(str(sample_frame['Cq'].dtype)))
+    if 'Content' in sample_frame and not {'Unknown', 'NTC'}.issuperset(sample_frame['Content']):
+        raise ValueError("Invalid values in Content column of sample frame")
+    return True
 
 def censor_background(d):
     # censor anything too close to any NTCs we have and remove NTCs from d

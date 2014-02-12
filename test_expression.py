@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
 import unittest
-from expression import expression, average_cq, rank_genes, calculate_all_nfs, nf_v
+from expression import expression, average_cq, rank_genes, calculate_all_nfs, nf_v, validate_sample_frame
 from types import *
 from sys import stdout
+import pandas as pd
 
 mean = lambda seq: float(sum(seq))/len(seq)
 
@@ -100,6 +101,28 @@ class TestRankGenes(unittest.TestCase):
                 if v > 3 and vs[v-1] < 0.15: break
                 print '%d: %f' % (v, vs[v]),
                 stdout.flush()
+
+class TestExPd(unittest.TestCase):
+    def test_validation(self):
+        # empty frame
+        a = pd.DataFrame()
+        self.assertRaises(TypeError, validate_sample_frame, ['a', 'b', 'c'])
+        self.assertRaises(TypeError, validate_sample_frame, None)
+        self.assertRaises(ValueError, validate_sample_frame, a)
+
+        # valid minimal frame
+        b = pd.DataFrame({'foo': [0], 'Cq': [1.0], 'Sample': ['bar'], 'Target': ['baz']})
+        self.assertIs(validate_sample_frame(b), True)
+        
+        # Integer Cq column should fail
+        c = pd.DataFrame({'foo': [0], 'Cq': [1], 'Sample': ['bar'], 'Target': ['baz']})
+        self.assertRaises(ValueError, validate_sample_frame, c)
+
+        # Invalid sample types (Content field) should fail
+        d = pd.DataFrame({'foo': [0, 1], 'Cq': [1.0, 2.0], 'Sample': ['bar', 'bar'], 'Target': ['baz', 'blip'], 'Content': ['Unknown', 'NTC']})
+        e = pd.DataFrame({'foo': [0, 1], 'Cq': [1.0, 2.0], 'Sample': ['bar', 'bar'], 'Target': ['baz', 'blip'], 'Content': ['Unknown', 'blah']})
+        self.assertIs(validate_sample_frame(d), True)
+        self.assertRaises(ValueError, validate_sample_frame, e)
 
 if __name__ == '__main__':
     unittest.main()
