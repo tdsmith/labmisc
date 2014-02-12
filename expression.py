@@ -17,14 +17,11 @@ def average_cq(seq, efficiency=1.0):
     denominator = sum( [pow(2.0*efficiency, -Ci) for Ci in seq] )
     return log(len(seq)/denominator)/log(2.0*efficiency)
 
-def make_sample_dict(sample_list):
-    d = {} # d[target][sample] = [cq1, cq2, ...]
-    for (target, sample, cq) in sample_list:
-        assert type(cq) is FloatType
-        if(isnan(cq)):
-            warn('Ignoring NaN Cq value for target %s, sample %s' % (target, sample), RuntimeWarning)
-            continue
-        d.setdefault(target,{}).setdefault(sample,[]).append(cq)
+def make_sample_dict(sample_frame):
+    d = {}
+    g = sample_frame.groupby(['Target', 'Sample'])
+    for (target, sample), h in g:
+        d.setdefault(target, {})[sample] = list(h['Cq'])
     return d
 
 def validate_sample_frame(sample_frame):
@@ -35,8 +32,6 @@ def validate_sample_frame(sample_frame):
             raise ValueError("Missing column {} in sample frame".format(col))
     if sample_frame['Cq'].dtype.kind != 'f':
         raise ValueError("Expected Cq column to have float type; has type {} instead".format(str(sample_frame['Cq'].dtype)))
-    if 'Content' in sample_frame and not {'Unknown', 'NTC'}.issuperset(sample_frame['Content']):
-        raise ValueError("Invalid values in Content column of sample frame")
     return True
 
 def censor_background(d):
@@ -127,13 +122,13 @@ def expression_nf(sample_list, nfs, ref_sample):
     return (out, ignored_targets, ignored_samples)
 
 
-def collect_expression(sample_list, ref_genes, ref_sample):
+def collect_expression(sample_frame, ref_genes, ref_sample):
     # normalize all samples by each of the reference genes
     table = {}
     if not (type(ref_genes) is set): ref_genes = set(ref_genes)
-    available_samples = set([sample[1] for sample in sample_list if sample[1] != 'NTC'])
+    available_samples = set(sample_frame['Sample']) - {'NTC'}
     for ref_gene in ref_genes:
-        table[ref_gene], ignored_targets, ignored_samples = expression(sample_list, ref_gene, ref_sample)
+        table[ref_gene], ignored_targets, ignored_samples = expression(sample_frame, ref_gene, ref_sample)
         if set(ignored_targets).intersection(ref_genes):
             raise ValueError("Bad reference sample. One or more reference gene values are not available.")
         available_samples -= set(ignored_samples)

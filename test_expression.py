@@ -15,9 +15,10 @@ class TestExpression(unittest.TestCase):
                 ['Exp1', 'Sample 2', 6.0],
                 ['Ref1', 'Sample 1', 3.3],
                 ['Ref1', 'Sample 2', 3.3]]
+        self.sample_frame = pd.DataFrame(self.sample_list, columns=['Target', 'Sample', 'Cq'])
 
     def test_returns_tuple(self):
-        r = expression(self.sample_list, 'Ref1', 'Sample 1')
+        r = expression(self.sample_frame, 'Ref1', 'Sample 1')
         self.assertIsInstance(r, TupleType)
         self.assertEqual(len(r), 3)
         self.assertIsInstance(r[0], DictType)
@@ -25,32 +26,36 @@ class TestExpression(unittest.TestCase):
         self.assertIsInstance(r[2], ListType)
 
     def test_does_not_skip_good_genes_or_samples(self):
-        sample_d, ignored_genes, ignored_samples = expression(self.sample_list, 'Ref1', 'Sample 1')
+        sample_d, ignored_genes, ignored_samples = expression(self.sample_frame, 'Ref1', 'Sample 1')
         self.assertEqual(ignored_genes, [])
         self.assertEqual(ignored_samples, [])
 
     def test_skips_genes_with_no_references(self):
         sample_list = self.sample_list + [['Exp2', 'Sample 2', 10.0]]
-        sample_d, ignored_genes, ignored_samples = expression(sample_list, 'Ref1', 'Sample 1')
+        sample_frame = pd.DataFrame(sample_list, columns=['Target', 'Sample', 'Cq'])
+        sample_d, ignored_genes, ignored_samples = expression(sample_frame, 'Ref1', 'Sample 1')
         self.assertIn('Exp2', ignored_genes)
 
     def test_skips_samples_with_no_reference(self):
         sample_list = self.sample_list + [['Exp1', 'Sample 3', 10.0]]
-        sample_d, ignored_genes, ignored_samples = expression(sample_list, 'Ref1', 'Sample 1')
+        sample_frame = pd.DataFrame(sample_list, columns=['Target', 'Sample', 'Cq'])
+        sample_d, ignored_genes, ignored_samples = expression(sample_frame, 'Ref1', 'Sample 1')
         self.assertIn('Sample 3', ignored_samples)
 
     def test_right_ballpark(self):
-        sample_d, ignored_genes, ignored_samples = expression(self.sample_list, 'Ref1', 'Sample 1')
+        sample_d, ignored_genes, ignored_samples = expression(self.sample_frame, 'Ref1', 'Sample 1')
         self.assertAlmostEqual(mean(sample_d['Exp1']['Sample 2']), 0.5)
 
     def test_silences_near_ntc(self):
         addme =  [['Exp2', 'Sample 1', 10.0], ['Exp2', 'Sample 2', 5.0]]
         sample_list = self.sample_list + addme
-        sample_d, ignored_genes, ignored_samples = expression(sample_list, 'Ref1', 'Sample 1')
+        sample_frame = pd.DataFrame(sample_list, columns=['Target', 'Sample', 'Cq'])
+        sample_d, ignored_genes, ignored_samples = expression(sample_frame, 'Ref1', 'Sample 1')
         self.assertAlmostEqual(mean(sample_d['Exp2']['Sample 2']), 2**5)
         
         sample_list = sample_list + [['Exp2', 'NTC', 11.0]]
-        sample_d, ignored_genes, ignored_samples = expression(sample_list, 'Ref1', 'Sample 1')
+        sample_frame = pd.DataFrame(sample_list, columns=['Target', 'Sample', 'Cq'])
+        sample_d, ignored_genes, ignored_samples = expression(sample_frame, 'Ref1', 'Sample 1')
         self.assertIn('Exp2', ignored_genes)
 
 
@@ -71,6 +76,8 @@ class TestRankGenes(unittest.TestCase):
         for line in buf:
             for (index, name) in enumerate(self.gene_names):
                 self.d.setdefault(line[0], []).append([name, line[1], float(line[2+index])])
+        for key in self.d:
+            self.d[key] = pd.DataFrame(self.d[key], columns=['Target', 'Sample', 'Cq'])
         # e.g. d['Fib'] = [['ACTB', 'Fib1', 12.34], ...]
 
     def test_ranking(self):
@@ -81,7 +88,7 @@ class TestRankGenes(unittest.TestCase):
            'Pool': ['SDHA', 'GAPD', 'HMBS', 'HPRT1', 'TBP', 'UBC', 'RPL13A', 'YWHAZ', 'ACTB', 'B2M']}
 
         for tissue in self.d:
-            ranked = rank_genes(self.d[tissue], self.gene_names, self.d[tissue][0][1])
+            ranked = rank_genes(self.d[tissue], self.gene_names, self.d[tissue].ix[0, 'Sample'])
             # no preference between the two best genes
             self.assertIn(ranked[0], key[tissue][:2])
             self.assertIn(ranked[1], key[tissue][:2])
@@ -91,16 +98,16 @@ class TestRankGenes(unittest.TestCase):
         comparison_vs = {'Fib': (3, 0.109409), 'BM': (2, 0.113745), 'Leukocyte': (3, 0.116988),
                 'Pool': (2, 0.202805), 'Neuroblastoma': (4, 0.138337)}
         for tissue in self.d:
-            print '\n%s' % tissue
-            ranked = rank_genes(self.d[tissue], self.gene_names, self.d[tissue][0][1])
-            nfs = calculate_all_nfs(self.d[tissue], ranked, self.d[tissue][0][1])
+            # print '\n%s' % tissue
+            ranked = rank_genes(self.d[tissue], self.gene_names, self.d[tissue].ix[0, 'Sample'])
+            nfs = calculate_all_nfs(self.d[tissue], ranked, self.d[tissue].ix[0, 'Sample'])
             vs = nf_v(nfs)
             test_v, test_value = comparison_vs[tissue]
             self.assertAlmostEqual(vs[test_v], test_value, places=5)
-            for v in sorted(vs.keys()):
-                if v > 3 and vs[v-1] < 0.15: break
-                print '%d: %f' % (v, vs[v]),
-                stdout.flush()
+            # for v in sorted(vs.keys()):
+                # if v > 3 and vs[v-1] < 0.15: break
+                # print '%d: %f' % (v, vs[v]),
+                # stdout.flush()
 
 class TestExPd(unittest.TestCase):
     def test_validation(self):
@@ -119,10 +126,14 @@ class TestExPd(unittest.TestCase):
         self.assertRaises(ValueError, validate_sample_frame, c)
 
         # Invalid sample types (Content field) should fail
-        d = pd.DataFrame({'foo': [0, 1], 'Cq': [1.0, 2.0], 'Sample': ['bar', 'bar'], 'Target': ['baz', 'blip'], 'Content': ['Unknown', 'NTC']})
-        e = pd.DataFrame({'foo': [0, 1], 'Cq': [1.0, 2.0], 'Sample': ['bar', 'bar'], 'Target': ['baz', 'blip'], 'Content': ['Unknown', 'blah']})
-        self.assertIs(validate_sample_frame(d), True)
-        self.assertRaises(ValueError, validate_sample_frame, e)
+        # d = pd.DataFrame({'foo': [0, 1], 'Cq': [1.0, 2.0], 'Sample': ['bar', 'bar'], 'Target': ['baz', 'blip'], 'Content': ['Unknown', 'NTC']})
+        # e = pd.DataFrame({'foo': [0, 1], 'Cq': [1.0, 2.0], 'Sample': ['bar', 'bar'], 'Target': ['baz', 'blip'], 'Content': ['Unknown', 'blah']})
+        # self.assertIs(validate_sample_frame(d), True)
+        # self.assertRaises(ValueError, validate_sample_frame, e)
+
+    def test_conversion(self):
+        pass
+
 
 if __name__ == '__main__':
     unittest.main()
