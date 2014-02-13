@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from math import isnan, log
-from numpy import mean, std
+from numpy import mean, std, power, asarray
 from scipy.stats.mstats import gmean
 from warnings import warn
 from types import *
@@ -46,6 +46,19 @@ def censor_background(d):
             d[target][sample] = [i for i in d[target][sample] if i < too_close]
             if len(d[target][sample]) == 0: del d[target][sample]
         del d[target]['NTC']
+
+def censor_frame_background(sdf, ntc_samples, margin):
+    ntcs = sdf.loc[ sdf['Sample'].apply(lambda x: x in ntc_samples), ]
+    if ntcs.empty:
+        return sdf
+    g = ntcs.groupby('Target')
+    min_ntcs = g['Cq'].min()
+    # if a target has no NTC, min_ntcs.loc[sample] is NaN
+    # we should retain all values from targets with no NTC
+    # all comparisons with NaN are false
+    # so we test for the "wrong" condition and invert the result
+    censored = sdf.loc[ ~(sdf['Cq'] > (min_ntcs.loc[sdf['Target']] - margin)) ]
+    return censored
 
 def censor_targets_missing_refsample(d, ref_sample):
     # all genes must have a reference sample
@@ -95,6 +108,29 @@ def expression(sample_list, ref_gene, ref_sample):
 
     return (out, ignored_targets, ignored_samples)
 
+def expression_frame(sdf, ref_target, ref_sample, ntc_samples=['NTC'], ntc_margin=log2(10)):
+    # It would be more correct to replace asarray calls (to discard indexes)
+    # with proper joins.
+    sdf = sdf.copy()
+    censored = censor_frame_background(sdf, ntc_samples, ntc_margin)
+   
+    ref_target_df = censored.ix[censored['Target'] == ref_target, ['Sample', 'Cq']]
+    ref_target_grouped = ref_target_df.groupby('Sample')
+    ref_target_mean_by_sample = ref_target_grouped['Cq'].aggregate(average_cq)
+    ref_target_mean_list = ref_target_mean_by_sample.ix[censored['Sample']]
+    ref_target_delta = asarray(ref_target_mean_list - ref_target_mean_by_sample[ref_sample])
+
+    ref_sample_df = censored.ix[censored['Sample'] == ref_sample, ['Target', 'Cq']]
+    ref_sample_grouped = ref_sample_df.groupby('Target')
+    ref_sample_mean_by_target = ref_sample_grouped['Cq'].aggregate(average_cq)
+    ref_sample_delta = asarray(censored['Cq'] - asarray(ref_sample_mean_by_target.ix[censored['Target']]))
+
+    rel_exp = pd.Series(
+            power(2, ref_target_delta - ref_sample_delta),
+            index = censored.index)
+
+    return rel_exp
+    
 def expression_nf(sample_list, nfs, ref_sample):
     d = make_sample_dict(sample_list)
     censor_background(d)

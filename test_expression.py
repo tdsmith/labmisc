@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import unittest
-from expression import expression, average_cq, rank_genes, calculate_all_nfs, nf_v, validate_sample_frame
+from expression import expression, average_cq, rank_genes, calculate_all_nfs, nf_v, validate_sample_frame, censor_frame_background, log2, expression_frame
 from types import *
 from sys import stdout
 import pandas as pd
@@ -16,6 +16,10 @@ class TestExpression(unittest.TestCase):
                 ['Ref1', 'Sample 1', 3.3],
                 ['Ref1', 'Sample 2', 3.3]]
         self.sample_frame = pd.DataFrame(self.sample_list, columns=['Target', 'Sample', 'Cq'])
+
+    def test_hello(self):
+        r = expression_frame(self.sample_frame, 'Ref1', 'Sample 1')
+        print r
 
     def test_returns_tuple(self):
         r = expression(self.sample_frame, 'Ref1', 'Sample 1')
@@ -46,6 +50,13 @@ class TestExpression(unittest.TestCase):
         sample_d, ignored_genes, ignored_samples = expression(self.sample_frame, 'Ref1', 'Sample 1')
         self.assertAlmostEqual(mean(sample_d['Exp1']['Sample 2']), 0.5)
 
+    def test_censor_background(self):
+        addme =  [['Exp2', 'Sample 1', 10.0], ['Exp2', 'Sample 2', 5.0]]
+        sample_list = self.sample_list + addme
+        sample_list = sample_list + [['Exp2', 'NTC', 11.0]]
+        sample_frame = pd.DataFrame(sample_list, columns=['Target', 'Sample', 'Cq'])
+        censored = censor_frame_background(sample_frame, ntc_samples=['NTC'], margin=log2(10))
+
     def test_silences_near_ntc(self):
         addme =  [['Exp2', 'Sample 1', 10.0], ['Exp2', 'Sample 2', 5.0]]
         sample_list = self.sample_list + addme
@@ -57,7 +68,6 @@ class TestExpression(unittest.TestCase):
         sample_frame = pd.DataFrame(sample_list, columns=['Target', 'Sample', 'Cq'])
         sample_d, ignored_genes, ignored_samples = expression(sample_frame, 'Ref1', 'Sample 1')
         self.assertIn('Exp2', ignored_genes)
-
 
 class TestAverage(unittest.TestCase):
     def test_averaging(self):
@@ -130,9 +140,6 @@ class TestExPd(unittest.TestCase):
         # e = pd.DataFrame({'foo': [0, 1], 'Cq': [1.0, 2.0], 'Sample': ['bar', 'bar'], 'Target': ['baz', 'blip'], 'Content': ['Unknown', 'blah']})
         # self.assertIs(validate_sample_frame(d), True)
         # self.assertRaises(ValueError, validate_sample_frame, e)
-
-    def test_conversion(self):
-        pass
 
 
 if __name__ == '__main__':
