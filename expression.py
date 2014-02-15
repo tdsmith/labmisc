@@ -10,6 +10,13 @@ import pandas as pd
 
 log2 = lambda x: log(x)/log(2)
 
+def make_sample_dict(sample_frame):
+    d = {}
+    g = sample_frame.groupby(['Target', 'Sample'])
+    for (target, sample), h in g:
+        d.setdefault(target, {})[sample] = list(h['Cq'])
+    return d
+
 def average_cq(seq, efficiency=1.0):
     # given a set of Cq values, return the Cq value that represents the
     # average expression level of the input.
@@ -17,15 +24,6 @@ def average_cq(seq, efficiency=1.0):
     # since the average of Cq values is not biologically meaningful.
     denominator = sum( [pow(2.0*efficiency, -Ci) for Ci in seq] )
     return log(len(seq)/denominator)/log(2.0*efficiency)
-
-"""
-def make_sample_dict(sample_frame):
-    d = {}
-    g = sample_frame.groupby(['Target', 'Sample'])
-    for (target, sample), h in g:
-        d.setdefault(target, {})[sample] = list(h['Cq'])
-    return d
-"""
 
 def validate_sample_frame(sample_frame):
     if not isinstance(sample_frame, pd.core.frame.DataFrame):
@@ -72,31 +70,14 @@ def expression_frame(sdf, ref_target, ref_sample, ntc_samples=['NTC'], ntc_margi
 
     return rel_exp
     
-def expression_nf(sample_list, nfs, ref_sample):
-    d = make_sample_dict(sample_list)
-    censor_background(d)
-    ignored_targets = censor_targets_missing_refsample(d, ref_sample)
+def expression_nf_frame(sample_frame, nf_n, ref_sample, ntc_samples=['NTC'], ntc_margin=log2(10)):
+    censored = censor_frame_background(sample_frame, ntc_samples, ntc_margin)
+    ref_sample_df = censored.ix[censored['Sample'] == ref_sample, ['Target', 'Cq']]
+    ref_sample_cq = ref_sample_df.groupby('Target')['Cq'].aggregate(average_cq)
 
-    # make sure all samples have a NF
-    ignored_samples = []
-    for target in d:
-        for sample in d[target]:
-            if sample not in nfs:
-                ignored_samples.append(sample)
-    for target in d:
-        for ignoreme in ignored_samples:
-            if ignoreme in d['target']:
-                del d[target][ignoreme]
-
-    out = {}
-    for target in d:
-        for sample in d[target]:
-            for cq in d[target][sample]:
-                delta = -cq + average_cq(d[target][ref_sample])
-                rel = pow(2, delta) / nfs[sample]
-                out.setdefault(target, {}).setdefault(sample, []).append(rel)
-
-    return (out, ignored_targets, ignored_samples)
+    delta = -censored['Cq'] + asarray(ref_sample_cq.ix[censored['Target']])
+    rel = power(2, delta) / asarray(nf_n.ix[censored['Sample']])
+    return rel
 
 def collect_expression_frame(sample_frame, ref_targets, ref_sample):
     by_gene = {'Sample': sample_frame['Sample'], 'Target': sample_frame['Target']}
@@ -140,6 +121,7 @@ def calculate_all_nfs_frame(sdf, ranked_genes, ref_sample):
         nfs[i] = gmean([pow(2, -grouped.ix[zip(repeat(ref_gene), samples)] + grouped.ix[ref_gene, ref_sample]) for ref_gene in ranked_genes[:i]])
     return pd.DataFrame(nfs, index=samples)
 
+"""
 def nfs_from(sample_list, ref_genes, ref_sample):
     # Returns a dictionary nfs, where nfs[sample] = nf.
     nfs = {}
@@ -148,6 +130,7 @@ def nfs_from(sample_list, ref_genes, ref_sample):
         if sample == 'NTC': continue
         nfs[sample] = gmean([pow(2, -average_cq(d[ref_gene][sample]) + average_cq(d[ref_gene][ref_sample])) for ref_gene in ref_genes])
     return nfs
+"""
 
 def nf_v_frame(nfs):
     v = []
@@ -162,7 +145,7 @@ def recommend_refset(sample_list, ref_genes, ref_sample):
     nfs = calculate_all_nfs(sample_list, ref_genes, ref_sample)
     vs = nf_v(nfs)
     rec = [(ranked_genes[0], 0)]
-    for v in sorted(vs.keys()):
+    for v in sorted(vs.index):
         if v > 3 and vs[v-1] < 0.15: break
         rec.append((ranked_genes[v-1], vs[v]))
     return rec

@@ -13,13 +13,14 @@ class TestExpression(unittest.TestCase):
         self.sample_list = [
                 ['Exp1', 'Sample 1', 5.0],
                 ['Exp1', 'Sample 2', 6.0],
+                ['Exp2', 'Sample 1', 4.0],
+                ['Exp2', 'Sample 2', 2.0],
                 ['Ref1', 'Sample 1', 3.3],
                 ['Ref1', 'Sample 2', 3.3]]
         self.sample_frame = pd.DataFrame(self.sample_list, columns=['Target', 'Sample', 'Cq'])
 
     def test_hello(self):
         r = expression_frame(self.sample_frame, 'Ref1', 'Sample 1')
-        self.sample_frame['RelExp'] = r
 
 """
     def test_does_not_skip_good_genes_or_samples(self):
@@ -107,6 +108,19 @@ class TestRankGenes(unittest.TestCase):
             vs = nf_v_frame(nfs)
             test_v, test_value = comparison_vs[tissue]
             self.assertAlmostEqual(vs[test_v], test_value, places=5)
+
+    def test_expression_nf(self):
+        ref_sample = self.d['Fib'].ix[0, 'Sample']
+        ranked = rank_target_frame(self.d['Fib'], self.gene_names, ref_sample)
+        nfs = calculate_all_nfs_frame(self.d['Fib'], ranked['Target'], ref_sample)
+        nf3 = nfs[3]
+        # old = expression_nf(self.d['Fib'], nf3, ref_sample)
+        mynew = expression_nf_frame(self.d['Fib'], nf3, ref_sample)
+        self.d['Fib']['RelExp'] = mynew
+        #print self.d['Fib']
+        #g = self.d['Fib'].groupby(['Target', 'Sample'])['RelExp'].mean()
+        #print old['ACTB']['FIB2'], g['ACTB', 'FIB2'] # 0.788928477632
+        #print old['HMBS']['FIB11'], g['HMBS', 'FIB11'] # 1.63007647118
 
 class TestExPd(unittest.TestCase):
     def test_validation(self):
