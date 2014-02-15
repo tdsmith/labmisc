@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import unittest
-from expression import expression, average_cq, rank_genes, calculate_all_nfs, nf_v, validate_sample_frame, censor_frame_background, log2, expression_frame
+from expression import *
 from types import *
 from sys import stdout
 import pandas as pd
@@ -19,7 +19,7 @@ class TestExpression(unittest.TestCase):
 
     def test_hello(self):
         r = expression_frame(self.sample_frame, 'Ref1', 'Sample 1')
-        print r
+        self.sample_frame['RelExp'] = r
 
     def test_returns_tuple(self):
         r = expression(self.sample_frame, 'Ref1', 'Sample 1')
@@ -104,11 +104,24 @@ class TestRankGenes(unittest.TestCase):
             self.assertIn(ranked[1], key[tissue][:2])
             self.assertEqual(ranked[2:], key[tissue][2:])
 
+    def test_frame_ranking(self):
+        key = {'Neuroblastoma': ['HPRT1', 'GAPD', 'SDHA', 'UBC', 'HMBS', 'YWHAZ', 'TBP', 'ACTB', 'RPL13A', 'B2M'],
+           'Fib': ['HPRT1', 'GAPD', 'YWHAZ', 'UBC', 'ACTB', 'TBP', 'SDHA', 'RPL13A', 'B2M', 'HMBS'],
+           'Leukocyte': ['UBC', 'YWHAZ', 'B2M', 'GAPD', 'RPL13A', 'TBP', 'SDHA', 'HPRT1', 'HMBS', 'ACTB'],
+           'BM': ['UBC', 'RPL13A', 'YWHAZ', 'HPRT1', 'GAPD', 'SDHA', 'TBP', 'HMBS', 'B2M', 'ACTB'],
+           'Pool': ['SDHA', 'GAPD', 'HMBS', 'HPRT1', 'TBP', 'UBC', 'RPL13A', 'YWHAZ', 'ACTB', 'B2M']}
+
+        for tissue in self.d:
+            ranked = rank_target_frame(self.d[tissue], self.gene_names, self.d[tissue].ix[0, 'Sample'])
+            # no preference between the two best genes
+            self.assertIn(ranked.ix[0, 'Target'], key[tissue][:2])
+            self.assertIn(ranked.ix[1, 'Target'], key[tissue][:2])
+            self.assertEqual(list(ranked.ix[2:, 'Target']), key[tissue][2:])
+
     def test_nfs(self):
         comparison_vs = {'Fib': (3, 0.109409), 'BM': (2, 0.113745), 'Leukocyte': (3, 0.116988),
                 'Pool': (2, 0.202805), 'Neuroblastoma': (4, 0.138337)}
         for tissue in self.d:
-            # print '\n%s' % tissue
             ranked = rank_genes(self.d[tissue], self.gene_names, self.d[tissue].ix[0, 'Sample'])
             nfs = calculate_all_nfs(self.d[tissue], ranked, self.d[tissue].ix[0, 'Sample'])
             vs = nf_v(nfs)
@@ -118,6 +131,17 @@ class TestRankGenes(unittest.TestCase):
                 # if v > 3 and vs[v-1] < 0.15: break
                 # print '%d: %f' % (v, vs[v]),
                 # stdout.flush()
+
+    def test_nfs_frame(self):
+        comparison_vs = {'Fib': (3, 0.109409), 'BM': (2, 0.113745), 'Leukocyte': (3, 0.116988),
+                'Pool': (2, 0.202805), 'Neuroblastoma': (4, 0.138337)}
+        for tissue in self.d:
+            print '\n%s' % tissue
+            ranked = rank_genes(self.d[tissue], self.gene_names, self.d[tissue].ix[0, 'Sample'])
+            nfs = calculate_all_nfs_frame(self.d[tissue], ranked, self.d[tissue].ix[0, 'Sample'])
+            vs = nf_v_frame(nfs)
+            test_v, test_value = comparison_vs[tissue]
+            self.assertAlmostEqual(vs[test_v], test_value, places=5)
 
 class TestExPd(unittest.TestCase):
     def test_validation(self):
