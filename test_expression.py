@@ -144,6 +144,13 @@ class TestExPd(unittest.TestCase):
         # self.assertIs(validate_sample_frame(d), True)
         # self.assertRaises(ValueError, validate_sample_frame, e)
 
+def make_sample_dict(sample_frame):
+    d = {}
+    g = sample_frame.groupby(['Target', 'Sample'])
+    for (target, sample), h in g:
+        d.setdefault(target, {})[sample] = list(h['Cq'])
+    return d
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -10,13 +10,6 @@ import pandas as pd
 
 log2 = lambda x: log(x)/log(2)
 
-def make_sample_dict(sample_frame):
-    d = {}
-    g = sample_frame.groupby(['Target', 'Sample'])
-    for (target, sample), h in g:
-        d.setdefault(target, {})[sample] = list(h['Cq'])
-    return d
-
 def average_cq(seq, efficiency=1.0):
     # given a set of Cq values, return the Cq value that represents the
     # average expression level of the input.
