@@ -18,7 +18,7 @@ def cast(field):
         return field
 
 def parse(fp):
-    reader = csv.reader(fp, delimiter=';', encoding='latin-1')
+    reader = csv.reader(fp, delimiter=',', encoding='latin-1')
     
     in_data_table = False
     frames = []
@@ -34,7 +34,7 @@ def parse(fp):
         frame['Rep'] = rep
 
     for line in reader:
-        if not line:
+        if not line or line == [u'']:
             continue
 
         if line[0] == 'Data Series Information':
