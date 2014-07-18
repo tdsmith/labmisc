@@ -12,14 +12,14 @@ import sys
 import os
 import time
 
-def standardize(infile, max_q, factor):
+def standardize(infile, max_q, factor, first_row):
     "Fit OD = (A-D)/(1+(x/C)^B) + D"
     plate = np.loadtxt(infile, delimiter=',')
-    od = np.ravel(plate[0:8, 0:2], order='F')
-    conc = ([max_q*factor**(-i) for i in range(7)] + [0]) * 2
+    od = np.ravel(plate[first_row:8, 0:2], order='F')
+    conc = ([max_q*factor**(-i) for i in range(first_row, 7)] + [0]) * 2
     def f(x, a, b, c, d):
             return (a-d)/(1+(x/c)**b) + d
-    guess = [plate[7,0], 1, max_q/factor, plate[1,0]]
+    guess = [plate[7,0], 1, max_q/factor, plate[first_row+1,0]]
     popt, pcov = sp.optimize.curve_fit(f, conc, od, guess)
 
     x = np.linspace(0, max_q, 200)
@@ -50,12 +50,14 @@ def main():
             help='The top of the standard curve')
     parser.add_argument('--factor', type=float, default=2,
             help='Serial dilution factor for the standard curve')
+    parser.add_argument('--droptop', type=int, default=0, metavar='N',
+            help="Drop the top N rows of the standard curve")
     parser.add_argument('--report', help='Directory to plate reports in. '
             'Default is to skip reports. Overwrites if present.', required=False)
     parser.add_argument('input_file', help='CSV file to operate on', type=argparse.FileType('r'))
     args = parser.parse_args()
 
-    plate, stats, graph = standardize(args.input_file, args.max, args.factor)
+    plate, stats, graph = standardize(args.input_file, args.max, args.factor, args.droptop)
     np.savetxt(sys.stdout.buffer, plate, fmt='%.3f', delimiter=',')
 
     if not args.report:
