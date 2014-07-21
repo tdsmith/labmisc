@@ -54,11 +54,20 @@ def main():
             help="Drop the top N rows of the standard curve")
     parser.add_argument('--report', help='Directory to plate reports in. '
             'Default is to skip reports. Overwrites if present.', required=False)
+    parser.add_argument('--wide', action='store_true', help='Print plate-shaped '
+            'output instead of tall output.')
     parser.add_argument('input_file', help='CSV file to operate on', type=argparse.FileType('r'))
     args = parser.parse_args()
 
     plate, stats, graph = standardize(args.input_file, args.max, args.factor, args.droptop)
-    np.savetxt(sys.stdout.buffer, plate, fmt='%.3f', delimiter=',')
+
+    if args.wide:
+        np.savetxt(sys.stdout.buffer, plate, fmt='%.3f', delimiter=',')
+    else:
+        print('Well,Concentration')
+        for col, colname in enumerate(range(1,13)):
+            for row, rowname in enumerate('ABCDEFGH'):
+                print('{}{},{}'.format(rowname, colname, plate[row, col]))
 
     if not args.report:
         return
