@@ -4,6 +4,7 @@ import scipy.interpolate
 from serial import Serial
 from time import sleep, time
 import sys
+import os.path
 
 _state = []
 _temp = None
@@ -36,7 +37,8 @@ def read(s):
 
 def main(tty):
     global _temp
-    lookup = np.flipud(np.loadtxt('therm_lookup.csv', delimiter=','))
+    basedir = os.path.dirname(sys.argv[0])
+    lookup = np.flipud(np.loadtxt(os.path.join(basedir, 'therm_lookup.csv'), delimiter=','))
     _temp = sp.interpolate.interp1d(lookup[:,1] * 1000, lookup[:,0], kind='cubic')
     s = Serial(tty, baudrate=115200, rtscts=True, timeout=0)
     s.flushInput()
@@ -54,5 +56,4 @@ def main(tty):
         s.close()
 
 if __name__ == '__main__':
-    import sys
     main(sys.argv[1])
