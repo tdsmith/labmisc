@@ -2,6 +2,10 @@
 
 """ mkpydeps 0.2
 
+** mkpydeps has been replaced by homebrew-pypi-poet
+   https://github.com/tdsmith/homebrew-pypi-poet
+   https://pypi.python.org/pypi/homebrew-pypi-poet
+
 Invoked like "mkpydeps foo" for some package foo **which is presently
 installed in sys.path**, determines which packages foo and its dependents
 depend on, downloads them from pypi and computes their checksums, and
