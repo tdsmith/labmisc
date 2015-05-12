@@ -1,16 +1,17 @@
-#!/usr/bin/env python3
-
+#!/usr/bin/env python
 from __future__ import division
+
 import argparse
-import scipy as sp
-import scipy.optimize
-import scipy.stats
+import os
+import sys
+import time
+
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import sys
-import os
-import time
+import scipy as sp
+import scipy.optimize
+import scipy.stats
 
 def standardize(infile, max_q, factor, first_row):
     "Fit OD = (A-D)/(1+(x/C)^B) + D"
@@ -70,7 +71,7 @@ def main():
     plate, stats, graph = standardize(args.input_file, args.max, args.factor, args.droptop)
 
     if args.wide:
-        np.savetxt(sys.stdout.buffer, plate, fmt='%.3f', delimiter=',')
+        np.savetxt(sys.stdout, plate, fmt='%.3f', delimiter=',')
     else:
         print('Well,Concentration')
         for col, colname in enumerate(range(1,13)):
