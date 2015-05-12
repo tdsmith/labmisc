@@ -26,9 +26,17 @@ def standardize(infile, max_q, factor, first_row):
     fig, ax = plt.subplots()
     ax.plot(x, f(x, *popt), '-', conc, od, 'o')
     ax.set_xlim(0, max_q*1.1)
+    ax.set_ylim(0, plate.max())
     ax.set_xlabel('Concentration (ng/ml)')
     ax.set_ylabel('OD')
     ax.set_title(infile.name)
+
+    rownames = "ABCDEFGH"
+    for row, rowname in enumerate(rownames):
+        for col in range(12):
+            ax.text(10, plate[row, col],
+                    "{}{}".format(rowname, col+1),
+                    size="x-small", ha="center", va="center")
 
     def inv(od, a, b, c, d):
         return c * ((a-d)/(od-d) - 1)**(1/b)
