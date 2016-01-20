@@ -28,7 +28,7 @@ def main(filename):
     while col <= col_last:
         analyte = ws.cell(row=ROW_ANALYTE_NAME, column=col).value
         for row in data_rows:
-            datum = {"Analyte": analyte}
+            datum = {"Analyte": analyte, "Error": None}
             datum["Sample"] = ws.cell(row=row, column=col_names).value
             datum["Dilution"] = ws.cell(row=row, column=col_dilution).value
             intensity_cell = ws.cell(row=row, column=col)
