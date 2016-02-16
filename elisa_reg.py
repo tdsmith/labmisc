@@ -2,6 +2,7 @@
 from __future__ import division
 
 import argparse
+import cStringIO
 import os
 import sys
 import time
@@ -15,7 +16,10 @@ import scipy.stats
 
 def standardize(infile, max_q, factor, first_row):
     "Fit OD = (A-D)/(1+(x/C)^B) + D"
-    plate = np.loadtxt(infile, delimiter=',')
+    # handle arbitrary newline character
+    fixed = infile.read().replace('\r\n', '\n').replace('\r', '\n')
+    fixed_file = cStringIO.StringIO(fixed)
+    plate = np.loadtxt(fixed_file, delimiter=',')
     od = np.ravel(plate[first_row:8, 0:2], order='F')
     conc = ([max_q*factor**(-i) for i in range(first_row, 7)] + [0]) * 2
     def f(x, a, b, c, d):
