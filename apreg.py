@@ -3,6 +3,7 @@
 
 import unicodecsv as csv
 import codecs
+import re
 import pandas as pd
 
 def cast(field):
@@ -35,29 +36,34 @@ def parse(fp):
     header = None
     units_next = False
     in_data_table = False
+    pt_duration_next = False
+    pt_duration = 0
+    pt_duration_unit = ""
 
     def closeout(frame, record_name):
         realname, rep = record_name.rsplit(None, 1)
         frame['Experiment'] = realname
         frame['Rep'] = rep
+        time_col = "Time [%s]" % pt_duration_unit
+        interval_col = "Interval [%s]" % pt_duration_unit
+        if time_col not in frame.columns:
+            frame[time_col] = frame["Meas. Pts."].astype(int) * pt_duration
+            frame[interval_col] = pt_duration
 
     for line in reader:
         if not line or line == [u'']:
             continue
 
-        if line[0] == 'Data Series Information':
+        if line[0] == 'Data Series Information' or line[0].startswith(u'Interval:'):
             # new record; terminate last record
             if record:
                 frame = pd.DataFrame(record)
                 closeout(frame, record_name)
                 frames.append(frame)
             # reset state
-            record, record_name = {}, None
+            record = {}
             in_data_table, units_next = False, False
             header = None
-
-        if line[0].startswith(u'Interval:'):
-            in_data_table = False
 
         if units_next:
             units_next = False
@@ -79,12 +85,25 @@ def parse(fp):
                     cell = ""
                 record.setdefault(header[i], []).append(cell)
 
+        if pt_duration_next:
+            pt_duration_next = False
+            for cell in line:
+                if not cell.startswith("Meas. Pt."):
+                    continue
+                break
+            m = re.match(r"Meas\. Pt\. Duration ([\d.]+) (\w+)", cell)
+            pt_duration, pt_duration_unit = m.groups()
+            pt_duration = float(pt_duration)
+
         if line[0] == 'Name:':
             record_name = line[-1]
 
         if line[0] == 'Meas. Pts.':
             units_next = True
             header = line
+
+        if line[0] == 'Time Setting:':
+            pt_duration_next = True
 
     # off the end of the file; close out
     frame = pd.DataFrame(record)
