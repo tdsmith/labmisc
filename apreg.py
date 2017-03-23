@@ -75,6 +75,8 @@ def parse(fp):
                 if header[i] in seen_headers:
                     continue
                 seen_headers.add(header[i])
+                if cell == "******":
+                    cell = ""
                 record.setdefault(header[i], []).append(cell)
 
         if line[0] == 'Name:':
