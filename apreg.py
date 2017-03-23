@@ -69,7 +69,12 @@ def parse(fp):
 
         if in_data_table:
             row = {}
+            # protect against repeated headers
+            seen_headers = set()
             for i, cell in enumerate(line):
+                if header[i] in seen_headers:
+                    continue
+                seen_headers.add(header[i])
                 record.setdefault(header[i], []).append(cell)
 
         if line[0] == 'Name:':
