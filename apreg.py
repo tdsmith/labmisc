@@ -56,6 +56,9 @@ def parse(fp):
             in_data_table, units_next = False, False
             header = None
 
+        if line[0].startswith(u'Interval:'):
+            in_data_table = False
+
         if units_next:
             units_next = False
             in_data_table = True
