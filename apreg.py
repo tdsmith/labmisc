@@ -96,10 +96,10 @@ def parse(fp):
 if __name__ == '__main__':
     import sys
     import os.path
-    with open(sys.argv[1], mode='rb') as fp:
-        table = parse(fp)
-    table.to_csv('regularized-' + os.path.basename(sys.argv[1]),
-            na_rep = 'NA',
-            index = False,
-            encoding = 'utf-8')
-
+    for filename in sys.argv[1:]:
+        with open(filename, mode='rb') as fp:
+            table = parse(fp)
+        table.to_csv('regularized-' + os.path.basename(filename),
+                na_rep = 'NA',
+                index = False,
+                encoding = 'utf-8')
