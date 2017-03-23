@@ -18,8 +18,14 @@ def cast(field):
         return field
 
 def parse(fp):
-    reader = csv.reader(fp, delimiter=',', encoding='latin-1')
-    
+    # guess delimiter
+    c = fp.read(1)
+    while c and c not in ",\t":
+        c = fp.read(1)
+    fp.seek(0)
+
+    reader = csv.reader(fp, delimiter=c or ",", encoding='latin-1')
+
     in_data_table = False
     frames = []
 
