@@ -33,6 +33,8 @@ def parse(fp):
     record = None
     record_name = None
     header = None
+    units_next = False
+    in_data_table = False
 
     def closeout(frame, record_name):
         realname, rep = record_name.rsplit(None, 1)
